@@ -1,4 +1,4 @@
-version: '3.8'
+# Docker Compose configuration for Secret Santa
 
 services:
   # PostgreSQL Database
@@ -20,6 +20,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # Prisma migration service (runs once on startup)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+    container_name: secret-santa-migrate
+    environment:
+      - DATABASE_URL=postgresql://secretsanta:${DB_PASSWORD:-SecretSanta2024DBPass}@db:5432/secretsanta?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["npx", "prisma", "db", "push", "--skip-generate"]
+    restart: "no"
+
   # Next.js Application
   app:
     build:
@@ -35,7 +50,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     command: ["node", "server.js"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
 volumes:
   postgres_data:
